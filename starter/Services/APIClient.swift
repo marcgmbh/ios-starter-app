@@ -25,10 +25,21 @@ class APIClient {
         }
     }
     
+    struct ContactMatch: Codable {
+        let id: String
+        let username: String
+    }
+    
+    private func getAuthHeader() async throws -> String {
+        let session = try await SupabaseManager.shared.client.auth.session
+        return "Bearer \(session.accessToken)"
+    }
+    
     func fetchProfile(userId: String) async throws -> Profile {
-        let url = URL(string: "\(baseURL)/users/\(userId)/profile")!
+        let url = URL(string: "\(baseURL)/users/me/profile")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -41,30 +52,19 @@ class APIClient {
     }
     
     func updateProfile(userId: String, username: String) async throws -> Profile {
-        let url = URL(string: "\(baseURL)/users/\(userId)/profile")!
+        let url = URL(string: "\(baseURL)/users/me/profile")!
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         
         let body = ["username": username]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        
-        print("📱 Updating profile:")
-        print("   URL: \(url)")
-        print("   Username: \(username)")
-        print("   User ID: \(userId)")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
-        }
-        
-        // Debug response
-        if let responseString = String(data: data, encoding: .utf8) {
-            print("📱 Response:")
-            print("   Status Code: \(httpResponse.statusCode)")
-            print("   Body: \(responseString)")
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
@@ -74,8 +74,29 @@ class APIClient {
         do {
             return try JSONDecoder().decode(Profile.self, from: data)
         } catch {
-            print("❌ Decoding error: \(error)")
             throw error
         }
+    }
+    
+    func matchContacts(phoneNumbers: [String]) async throws -> [ContactMatch] {
+        let url = URL(string: "\(baseURL)/friends/contacts/match")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        
+        let body: [String: Any] = [
+            "phoneNumbers": phoneNumbers
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        
+        return try JSONDecoder().decode([ContactMatch].self, from: data)
     }
 }
