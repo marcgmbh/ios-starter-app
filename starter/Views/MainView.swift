@@ -11,6 +11,7 @@ struct MainView: View {
     @StateObject private var appState = AppStateManager.shared
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var showManageFriends = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -23,6 +24,13 @@ struct MainView: View {
                 .foregroundColor(.gray)
             
             Spacer()
+            
+            Button {
+                showManageFriends = true
+            } label: {
+                PrimaryButton(text: "Manage Friends")
+            }
+            .padding(.horizontal, 40)
             
             Button {
                 Task {
@@ -39,6 +47,9 @@ struct MainView: View {
             .padding(.horizontal, 40)
         }
         .padding()
+        .sheet(isPresented: $showManageFriends) {
+            ManageFriendsView()
+        }
         .alert("Error", isPresented: $showError) {
             Button("OK") {
                 showError = false
