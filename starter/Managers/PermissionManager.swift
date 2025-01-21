@@ -1,3 +1,10 @@
+//
+//  PermissionManager.swift
+//  starter
+//
+//  Created by marc on 21.01.25.
+//
+
 import SwiftUI
 import UserNotifications
 import Contacts
@@ -23,28 +30,24 @@ final class PermissionManager: ObservableObject {
     // MARK: - Public Methods
     
     /// Requests notification permissions from the user
-    func requestNotifications() async -> Bool {
+    func requestNotifications() async throws {
         do {
-            let granted = try await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound, .badge])
-            hasNotifications = granted
-            return granted
+            try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
+            await MainActor.run {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
         } catch {
-            print("Failed to request notifications:", error.localizedDescription)
-            return false
+            throw error
         }
     }
     
     /// Requests contacts permissions from the user
-    func requestContacts() async -> Bool {
+    func requestContacts() async throws {
         let store = CNContactStore()
         do {
-            let granted = try await store.requestAccess(for: .contacts)
-            hasContacts = granted
-            return granted
+            try await store.requestAccess(for: .contacts)
         } catch {
-            print("Failed to request contacts access:", error.localizedDescription)
-            return false
+            throw error
         }
     }
     
