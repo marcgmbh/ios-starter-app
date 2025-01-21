@@ -1,3 +1,10 @@
+//
+//  BottomButtonLayout.swift
+//  starter
+//
+//  Created by marc on 21.01.25.
+//
+
 import SwiftUI
 
 struct BottomButtonLayout<Content: View, ButtonContent: View>: View {

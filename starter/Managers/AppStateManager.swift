@@ -1,3 +1,10 @@
+//
+//  AppStateManager.swift
+//  starter
+//
+//  Created by marc on 21.01.25.
+//
+
 import SwiftUI
 import UserNotifications
 import Contacts
