@@ -1,3 +1,10 @@
+//
+//  ManageFriendsViewModel.swift
+//  starter
+//
+//  Created by marc on 21.01.25.
+//
+
 import Foundation
 import Contacts
 
@@ -57,7 +64,8 @@ class ManageFriendsViewModel: ObservableObject {
             self.contacts = matchedContacts.sorted { $0.name < $1.name }
             
         } catch {
-            print("Error loading contacts: \(error)")
+            // Clear contacts on error
+            self.contacts = []
         }
     }
 }

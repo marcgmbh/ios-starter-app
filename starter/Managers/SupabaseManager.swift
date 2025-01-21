@@ -1,3 +1,10 @@
+//
+//  SupabaseManager.swift
+//  starter
+//
+//  Created by marc on 21.01.25.
+//
+
 import Foundation
 import Supabase
 
