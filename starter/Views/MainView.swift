@@ -8,7 +8,9 @@
 import SwiftUI
 
 struct MainView: View {
-    @EnvironmentObject private var appState: AppState
+    @StateObject private var appState = AppStateManager.shared
+    @State private var showError = false
+    @State private var errorMessage = ""
     
     var body: some View {
         VStack(spacing: 20) {
@@ -22,18 +24,27 @@ struct MainView: View {
             
             Spacer()
             
-            Button(action: {
-                appState.reset()
-            }) {
-                Text("Sign Out")
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.red)
-                    .cornerRadius(10)
+            Button {
+                Task {
+                    do {
+                        try await appState.signOut()
+                    } catch {
+                        errorMessage = "Failed to sign out: \(error.localizedDescription)"
+                        showError = true
+                    }
+                }
+            } label: {
+                PrimaryButton(text: "Sign Out")
             }
             .padding(.horizontal, 40)
         }
         .padding()
+        .alert("Error", isPresented: $showError) {
+            Button("OK") {
+                showError = false
+            }
+        } message: {
+            Text(errorMessage)
+        }
     }
 }
