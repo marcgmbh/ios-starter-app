@@ -1,51 +1,68 @@
-//
-//  UsernameView.swift
-//  starter
-//
-//  Created by marc on 16.01.25.
-//
-
 import SwiftUI
 
 struct UsernameView: View {
-    @EnvironmentObject private var appState: AppState
+    @StateObject private var appState = AppStateManager.shared
+    @StateObject private var supabase = SupabaseManager.shared
     @State private var username = ""
     @State private var showError = false
-    @FocusState private var isUsernameFocused: Bool
+    @State private var errorMessage = ""
+    @State private var isLoading = false
     
     var body: some View {
         BottomButtonLayout {
-            VStack(spacing: 20) {
-                DescriptionText(text: "Choose Username")
+            VStack {
+                DescriptionText("Choose Username")
+                    .font(.system(size: 20, weight: .regular, design: .rounded))
                 
                 InputFieldView(
-                    placeholder: "Username",
+                    placeholder: "username",
                     text: $username,
+                    keyboardType: .default,
                     textContentType: .username
                 )
+                .font(.system(size: 30, weight: .regular, design: .rounded))
+                .padding()
+                .multilineTextAlignment(.center)
                 
                 if showError {
-                    Text("Please enter a valid username")
+                    Text(errorMessage)
                         .foregroundColor(.red)
                         .font(.caption)
                 }
             }
         } buttonContent: {
-            Button(action: handleUsername) {
-                PrimaryButton(myText: "Continue")
+            Button {
+                Task {
+                    await updateUsername()
+                }
+            } label: {
+                PrimaryButton(text: "Continue", isLoading: isLoading)
             }
-            .disabled(username.isEmpty)
+            .disabled(username.isEmpty || isLoading)
         }
     }
     
-    private func handleUsername() {
-        guard username.count >= 3 else {
+    private func updateUsername() async {
+        guard !username.isEmpty else {
             showError = true
+            errorMessage = "Please enter a username"
             return
         }
         
-        appState.username = username
-        appState.moveToNextScreen()
+        isLoading = true
+        showError = false
+        
+        do {
+            guard let userId = supabase.session?.user.id else { return }
+            _ = try await APIClient.shared.updateProfile(userId: userId.uuidString, username: username)
+            appState.setUsername(username)
+            appState.moveToNextScreen()
+        } catch {
+            showError = true
+            errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
     }
 }
 
