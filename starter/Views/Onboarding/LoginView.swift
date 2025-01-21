@@ -103,7 +103,7 @@ struct LoginView: View {
     }
     
     private func isTestNumber(_ number: String) -> Bool {
-        ["+16572145917", "16572145917", "6572145917"].contains(number)
+        [].contains(number)
     }
     
     private func sendVerificationCode() async {
