@@ -10,28 +10,31 @@ import SwiftUI
 struct ContactRowView: View {
     let contact: Contact
     @StateObject private var viewModel = ContactViewModel()
+    @State private var isProcessing = false
     
     var body: some View {
-        HStack {
-            Circle()
-                .foregroundColor(.gray.opacity(0.3))
-                .frame(width: 40, height: 40)
-            
-            Text("@\(contact.name)")
-                .font(.headline)
+        HStack(spacing: 12) {
+            Text(contact.name)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
             
             Spacer()
             
             Button {
+                guard !isProcessing else { return }
+                isProcessing = true
                 Task {
                     await viewModel.sendFriendRequest(to: contact)
+                    isProcessing = false
                 }
             } label: {
                 Text("Add")
-                    .foregroundColor(.blue)
+                    .primaryActionStyle()
             }
+            .buttonStyle(BorderlessButtonStyle())
+            .disabled(isProcessing)
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
-    

@@ -99,4 +99,146 @@ class APIClient {
         
         return try JSONDecoder().decode([ContactMatch].self, from: data)
     }
+    
+    func sendFriendRequest(toUserId: String) async throws {
+        let url = URL(string: "\(baseURL)/friends/request/\(toUserId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+    }
+    
+    func getPendingFriendRequests() async throws -> [FriendRequest] {
+        print("📱 Fetching pending friend requests...")
+        let url = URL(string: "\(baseURL)/friends/requests/pending")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response while fetching friend requests")
+            throw URLError(.badServerResponse)
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            print("❌ Bad server response: \(httpResponse.statusCode)")
+            throw URLError(.badServerResponse)
+        }
+        
+        // Debug: Print the response data
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("📝 Raw API Response: \(jsonString)")
+        }
+        
+        do {
+            let requests = try JSONDecoder().decode([FriendRequest].self, from: data)
+            print("✅ Successfully fetched \(requests.count) friend requests")
+            return requests
+        } catch {
+            print("❌ Failed to decode friend requests: \(error)")
+            if let decodingError = error as? DecodingError {
+                switch decodingError {
+                case .keyNotFound(let key, let context):
+                    print("Missing key: \(key) at path: \(context.codingPath)")
+                case .typeMismatch(let type, let context):
+                    print("Type mismatch: expected \(type) at path: \(context.codingPath)")
+                default:
+                    print("Other decoding error: \(decodingError)")
+                }
+            }
+            throw error
+        }
+    }
+    
+    func respondToFriendRequest(requestId: String, accept: Bool) async throws {
+        print("📱 Responding to friend request \(requestId) with accept=\(accept)")
+        let url = URL(string: "\(baseURL)/friends/request/\(requestId)/respond")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        
+        let body = ["accept": accept]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response")
+            throw URLError(.badServerResponse)
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            print("❌ Bad server response: \(httpResponse.statusCode)")
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("❌ Error details: \(errorString)")
+            }
+            throw URLError(.badServerResponse)
+        }
+        
+        print("✅ Successfully \(accept ? "accepted" : "rejected") friend request")
+    }
+    
+    /// Fetches the authenticated user's friends list from the API
+    /// - Returns: Array of Friendship objects
+    /// - Throws: URLError for network issues, DecodingError for parsing issues
+    func getFriends() async throws -> [Friendship] {
+        let endpoint = "\(baseURL)/friends"
+        print("📱 Fetching friends from \(endpoint)")
+        
+        var request = URLRequest(url: URL(string: endpoint)!)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("❌ Invalid HTTP response type")
+                throw URLError(.badServerResponse)
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                print("❌ Bad server response: \(httpResponse.statusCode)")
+                if let errorString = String(data: data, encoding: .utf8) {
+                    print("❌ Error details: \(errorString)")
+                }
+                throw URLError(.badServerResponse)
+            }
+            
+            #if DEBUG
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("📱 Raw API Response: \(jsonString)")
+            }
+            #endif
+            
+            let friends = try JSONDecoder().decode([Friendship].self, from: data)
+            print("✅ Successfully fetched \(friends.count) friends")
+            
+            #if DEBUG
+            for friend in friends {
+                print("  - Friend ID: \(friend.id)")
+                print("    Username: \(friend.friend?.username ?? "nil")")
+            }
+            #endif
+            
+            return friends
+            
+        } catch let decodingError as DecodingError {
+            print("❌ Failed to decode friends: \(decodingError)")
+            throw decodingError
+        } catch {
+            print("❌ Network error: \(error)")
+            throw error
+        }
+    }
 }

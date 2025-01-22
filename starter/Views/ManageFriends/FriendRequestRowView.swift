@@ -10,52 +10,69 @@ import SwiftUI
 struct FriendRequestRowView: View {
     let request: FriendRequest
     @StateObject private var viewModel = FriendRequestViewModel()
+    @State private var isProcessing = false
+    @State private var opacity = 1.0
     
     var body: some View {
-        HStack {
-            if let pfpUrl = request.fromUser?.pfpUrl {
-                AsyncImage(url: URL(string: pfpUrl)) { image in
-                    image.resizable()
-                } placeholder: {
-                    Circle()
-                        .foregroundColor(.gray.opacity(0.3))
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-            } else {
-                Circle()
-                    .foregroundColor(.gray.opacity(0.3))
-                    .frame(width: 40, height: 40)
-            }
-            
-            VStack(alignment: .leading) {
-                Text(request.fromUser?.username ?? "Unknown")
-                    .font(.headline)
-            }
+        HStack(spacing: 12) {
+            // Username
+            Text(request.direction == .sent ? 
+                 "\(request.toUser?.username ?? "Unknown")" :
+                 "\(request.fromUser?.username ?? "Unknown")")
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
             
             Spacer()
             
+            // Action Buttons
             if request.status == .pending {
-                HStack(spacing: 12) {
-                    Button {
-                        Task {
-                            await viewModel.acceptRequest(request)
+                if request.direction == .received {
+                    HStack(spacing: 8) {
+                        Button {
+                            guard !isProcessing else { return }
+                            isProcessing = true
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                opacity = 0
+                            }
+                            Task {
+                                print("📱 Accepting friend request")
+                                await viewModel.acceptRequest(request)
+                                isProcessing = false
+                            }
+                        } label: {
+                            Text("yes")
+                                .primaryActionStyle()
                         }
-                    } label: {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                    }
-                    
-                    Button {
-                        Task {
-                            await viewModel.rejectRequest(request)
+                        .buttonStyle(BorderlessButtonStyle())
+                        .disabled(isProcessing)
+                        
+                        Button {
+                            guard !isProcessing else { return }
+                            isProcessing = true
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                opacity = 0
+                            }
+                            Task {
+                                print("📱 Rejecting friend request")
+                                await viewModel.rejectRequest(request)
+                                isProcessing = false
+                            }
+                        } label: {
+                            Text("no")
+                                .secondaryActionStyle()
                         }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.red)
+                        .buttonStyle(BorderlessButtonStyle())
+                        .disabled(isProcessing)
                     }
+                } else {
+                    Text("Pending")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
                 }
             }
         }
+        .padding(.vertical, 4)
+        .opacity(opacity)
+        .contentShape(Rectangle())
     }
 }

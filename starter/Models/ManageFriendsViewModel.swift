@@ -13,11 +13,66 @@ class ManageFriendsViewModel: ObservableObject {
     @Published var friendships: [Friendship] = []
     @Published var friendRequests: [FriendRequest] = []
     @Published var contacts: [Contact] = []
+    @Published var isLoadingRequests = false
+    @Published var isLoadingFriends = false
+    @Published var friendRequestsError: Error?
+    @Published var friendsError: Error?
     private let contactStore = CNContactStore()
     
+    nonisolated init() {
+        print("📱 ManageFriendsViewModel initialized")
+        Task { @MainActor in
+            self.setupNotifications()
+        }
+    }
+    
+    @MainActor
+    private func setupNotifications() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleFriendRequestSent),
+            name: NSNotification.Name("FriendRequestSent"),
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleFriendRequestUpdate),
+            name: NSNotification.Name("FriendRequestUpdate"),
+            object: nil
+        )
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    @objc private func handleFriendRequestSent(_ notification: Notification) {
+        if let contactId = notification.userInfo?["contactId"] as? String {
+            // Remove the contact and refresh friend requests
+            removeContact(withId: contactId)
+            Task {
+                await refresh()
+            }
+        }
+    }
+    
+    @objc private func handleFriendRequestUpdate() {
+        Task { @MainActor in
+            await refresh()
+        }
+    }
+    
+    func removeContact(withId id: String) {
+        contacts.removeAll { $0.id == id }
+    }
+    
     func refresh() async {
-        await loadContacts()
-        // TODO: Load friendships and friend requests
+        print("📱 Refreshing ManageFriendsView data...")
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadFriends() }
+            group.addTask { await self.loadPendingRequests() }
+            group.addTask { await self.loadContacts() }
+        }
     }
     
     private func normalizePhoneNumber(_ phoneNumber: String) -> String {
@@ -56,7 +111,7 @@ class ManageFriendsViewModel: ObservableObject {
                 Contact(
                     id: match.id,
                     name: match.username,
-                    phoneNumber: "" // We don't need to display the phone number
+                    phoneNumber: ""
                 )
             }
             
@@ -68,22 +123,98 @@ class ManageFriendsViewModel: ObservableObject {
             self.contacts = []
         }
     }
+    
+    private func loadPendingRequests() async {
+        isLoadingRequests = true
+        friendRequestsError = nil
+        
+        do {
+            self.friendRequests = try await APIClient.shared.getPendingFriendRequests()
+        } catch {
+            print("❌ Error in ViewModel - Failed to load friend requests: \(error)")
+            self.friendRequestsError = error
+            self.friendRequests = []
+        }
+        
+        isLoadingRequests = false
+    }
+    
+    private func loadFriends() async {
+        print("📱 Loading friends...")
+        isLoadingFriends = true
+        do {
+            friendships = try await APIClient.shared.getFriends()
+            print("✅ Loaded \(friendships.count) friends")
+        } catch {
+            print("❌ Failed to load friends: \(error)")
+            friendsError = error
+        }
+        isLoadingFriends = false
+    }
 }
 
 @MainActor
 class FriendRequestViewModel: ObservableObject {
+    @Published var isLoading = false
+    @Published var error: Error?
+    
     func acceptRequest(_ request: FriendRequest) async {
-        // TODO: Implement accept friend request logic
+        isLoading = true
+        error = nil
+        
+        do {
+            print("✅ Accepting friend request: \(request.id)")
+            try await APIClient.shared.respondToFriendRequest(requestId: request.id, accept: true)
+            NotificationCenter.default.post(name: NSNotification.Name("FriendRequestUpdate"), object: nil)
+            print("✅ Friend request accepted successfully")
+        } catch {
+            print("❌ Failed to accept friend request: \(error)")
+            self.error = error
+        }
+        
+        isLoading = false
     }
     
     func rejectRequest(_ request: FriendRequest) async {
-        // TODO: Implement reject friend request logic
+        isLoading = true
+        error = nil
+        
+        do {
+            print("✅ Rejecting friend request: \(request.id)")
+            try await APIClient.shared.respondToFriendRequest(requestId: request.id, accept: false)
+            NotificationCenter.default.post(name: NSNotification.Name("FriendRequestUpdate"), object: nil)
+            print("✅ Friend request rejected successfully")
+        } catch {
+            print("❌ Failed to reject friend request: \(error)")
+            self.error = error
+        }
+        
+        isLoading = false
     }
 }
 
 @MainActor
 class ContactViewModel: ObservableObject {
+    @Published var isLoading = false
+    @Published var error: Error?
+    
     func sendFriendRequest(to contact: Contact) async {
-        // TODO: Implement send friend request logic
+        isLoading = true
+        error = nil
+        
+        do {
+            try await APIClient.shared.sendFriendRequest(toUserId: contact.id)
+            
+            // Post notification to update UI
+            NotificationCenter.default.post(
+                name: NSNotification.Name("FriendRequestSent"),
+                object: nil,
+                userInfo: ["contactId": contact.id]
+            )
+        } catch {
+            self.error = error
+        }
+        
+        isLoading = false
     }
 }
