@@ -15,14 +15,9 @@ struct MainView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            Text("Welcome \(appState.username)!")
+            Text("welcome \(appState.username)!")
                 .font(.largeTitle)
                 .fontWeight(.bold)
-            
-            Text("You're all set!")
-                .font(.title2)
-                .foregroundColor(.gray)
-            
             Spacer()
             
             Button {
@@ -30,7 +25,6 @@ struct MainView: View {
             } label: {
                 PrimaryButton(text: "Manage Friends")
             }
-            .padding(.horizontal, 40)
             
             Button {
                 Task {
@@ -44,7 +38,6 @@ struct MainView: View {
             } label: {
                 PrimaryButton(text: "Sign Out")
             }
-            .padding(.horizontal, 40)
         }
         .padding()
         .sheet(isPresented: $showManageFriends) {
