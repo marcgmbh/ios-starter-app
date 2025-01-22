@@ -9,9 +9,17 @@ import SwiftUI
 
 @main
 struct starterApp: App {
+    @StateObject private var appState = AppStateManager.shared
+    
+    init() {
+        // Initialize Supabase on app launch
+        _ = SupabaseManager.shared
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(appState)
         }
     }
 }

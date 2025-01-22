@@ -34,9 +34,12 @@ final class AppStateManager: ObservableObject {
     var hasPermissions: Bool { hasNotifications && hasContacts }
     
     private init() {
+        print("📱 Initializing AppStateManager...")
         // Load saved state
         self.isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
         self.username = UserDefaults.standard.string(forKey: "username") ?? ""
+        
+        // Try to restore session state
         if let screenRaw = UserDefaults.standard.string(forKey: "currentScreen"),
            let screen = AppScreen(rawValue: screenRaw) {
             self.currentScreen = screen
@@ -45,6 +48,25 @@ final class AppStateManager: ObservableObject {
         // Check permissions on launch
         Task {
             await checkPermissionStates()
+            
+            // Check if we have a saved session
+            if UserDefaults.standard.data(forKey: "supabase_session") != nil {
+                print("📱 Found saved session, setting logged in state")
+                self.isLoggedIn = true
+                
+                // Set screen based on permissions
+                if !hasPermissions {
+                    print("📱 Missing permissions, showing permission screen")
+                    self.currentScreen = .permissions
+                } else if self.currentScreen == .login {
+                    print("📱 Has permissions, showing main screen")
+                    self.currentScreen = .main
+                }
+            } else {
+                print("📱 No saved session found, setting logged out state")
+                self.isLoggedIn = false
+                self.currentScreen = .login
+            }
         }
     }
     
@@ -97,9 +119,28 @@ final class AppStateManager: ObservableObject {
     }
     
     func setLoggedIn(_ value: Bool) {
-        Task { @MainActor in
-            await updateLoginState(value)
+        print("📱 Setting logged in state to: \(value)")
+        isLoggedIn = value
+        UserDefaults.standard.set(value, forKey: "isLoggedIn")
+        
+        if value {
+            if currentScreen == .login {
+                if !hasPermissions {
+                    print("📱 Missing permissions, showing permission screen")
+                    currentScreen = .permissions
+                } else {
+                    print("📱 Has permissions, showing main screen")
+                    currentScreen = .main
+                }
+            }
+        } else {
+            currentScreen = .login
+            username = ""
+            UserDefaults.standard.removeObject(forKey: "username")
         }
+        
+        // Save current screen
+        UserDefaults.standard.set(currentScreen.rawValue, forKey: "currentScreen")
     }
     
     func setUsername(_ value: String) {
@@ -123,7 +164,14 @@ final class AppStateManager: ObservableObject {
         return hasPermissions
     }
     
-    private func checkPermissionStates() async {
+    func checkPermissionStates() async {
+        print("📱 Checking permission states...")
         await permissionManager.checkPermissionStates()
+        
+        // Update screen if needed
+        if isLoggedIn && !hasPermissions && currentScreen == .main {
+            print("📱 Missing permissions detected, moving to permissions screen")
+            currentScreen = .permissions
+        }
     }
 }
