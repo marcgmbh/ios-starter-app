@@ -6,9 +6,12 @@
 //
 
 import SwiftUI
+import FirebaseCore
+import FirebaseMessaging
 
 @main
 struct starterApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var appState = AppStateManager.shared
     
     init() {
