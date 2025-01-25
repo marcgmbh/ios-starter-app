@@ -48,11 +48,11 @@ final class SupabaseManager: ObservableObject {
                             UserDefaults.standard.set(data, forKey: "supabase_session")
                             print("💾 Saved refreshed session to UserDefaults")
                         }
-                        AppStateManager.shared.setLoggedIn(true)
+                        await AppStateManager.shared.setLoggedIn(true)
                     } catch {
                         print("❌ Failed to refresh session: \(error)")
                         UserDefaults.standard.removeObject(forKey: "supabase_session")
-                        AppStateManager.shared.setLoggedIn(false)
+                        await       AppStateManager.shared.setLoggedIn(false)
                     }
                 }
             } catch {
@@ -77,14 +77,14 @@ final class SupabaseManager: ObservableObject {
                     UserDefaults.standard.set(data, forKey: "supabase_session")
                     print("💾 Saved refreshed session to UserDefaults")
                 }
-                AppStateManager.shared.setLoggedIn(true)
+                await AppStateManager.shared.setLoggedIn(true)
             }
         } catch {
             print("❌ Failed to refresh session: \(error)")
             // Clear invalid session
             UserDefaults.standard.removeObject(forKey: "supabase_session")
             self.session = nil
-            AppStateManager.shared.setLoggedIn(false)
+            await       AppStateManager.shared.setLoggedIn(false)
         }
     }
     
@@ -112,9 +112,23 @@ final class SupabaseManager: ObservableObject {
                 UserDefaults.standard.set(data, forKey: "supabase_session")
                 print("💾 Saved new session to UserDefaults")
             }
-            AppStateManager.shared.setLoggedIn(true)
+            
+            // First set logged in state
+            await AppStateManager.shared.setLoggedIn(true)
+            
+            // Then check if user has username
+            do {
+                let profile = try await APIClient.shared.fetchProfile(userId: session.user.id.uuidString)
+                if let username = profile.username {
+                    print("📱 Found username:", username)
+                    await AppStateManager.shared.setUsername(username)
+                }
+            } catch {
+                print("❌ Error fetching profile:", error)
+            }
         } else {
             print("❌ No session returned from OTP verification")
+            throw NSError(domain: "SupabaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "No session returned"])
         }
     }
     
@@ -124,10 +138,33 @@ final class SupabaseManager: ObservableObject {
             try await client.auth.signOut()
             UserDefaults.standard.removeObject(forKey: "supabase_session")
             session = nil
-            AppStateManager.shared.setLoggedIn(false)
+            await AppStateManager.shared.setLoggedIn(false)
             print("✅ Sign out successful")
         } catch {
             print("❌ Error signing out: \(error)")
+        }
+    }
+    
+    func saveFCMToken(_ token: String) async throws {
+        print("📱 Starting FCM token save process...")
+        guard let session = session else {
+            print("❌ FCM token save failed: No active session")
+            throw NSError(domain: "SupabaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "No active session"])
+        }
+        
+        let userId = session.user.id.uuidString
+        print("📱 Saving FCM token for user: \(userId)")
+        
+        do {
+            try await client.database
+                .from("profiles")
+                .update(["fcm_token": token])
+                .eq("user_id", value: userId)
+                .execute()
+            print("✅ Successfully saved FCM token to profiles table")
+        } catch {
+            print("❌ Failed to save FCM token: \(error)")
+            throw error
         }
     }
 }

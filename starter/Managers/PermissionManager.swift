@@ -22,8 +22,10 @@ final class PermissionManager: ObservableObject {
     // MARK: - Initialization
     
     private init() {
+        print("📱 Initializing PermissionManager...")
+        // Only check current status on init, don't request
         Task {
-            await checkPermissionStates()
+            await checkCurrentStatus()
         }
     }
     
@@ -31,28 +33,40 @@ final class PermissionManager: ObservableObject {
     
     /// Requests notification permissions from the user
     func requestNotifications() async throws {
+        print("📱 Requesting notification permissions...")
         do {
-            try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
-            await MainActor.run {
-                UIApplication.shared.registerForRemoteNotifications()
+            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
+            print(granted ? "✅ Notification permissions granted" : "❌ Notification permissions denied")
+            
+            if granted {
+                await MainActor.run {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
             }
+            await checkNotificationStatus()
         } catch {
+            print("❌ Error requesting notification permissions:", error)
             throw error
         }
     }
     
     /// Requests contacts permissions from the user
     func requestContacts() async throws {
+        print("📱 Requesting contacts permissions...")
         let store = CNContactStore()
         do {
-            try await store.requestAccess(for: .contacts)
+            let granted = try await store.requestAccess(for: .contacts)
+            print(granted ? "✅ Contacts permissions granted" : "❌ Contacts permissions denied")
+            await checkContactsStatus()
         } catch {
+            print("❌ Error requesting contacts permissions:", error)
             throw error
         }
     }
     
-    /// Checks the current state of all permissions
-    func checkPermissionStates() async {
+    /// Checks the current state of all permissions without requesting
+    func checkCurrentStatus() async {
+        print("📱 Checking current permission states...")
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 await self.checkNotificationStatus()
@@ -67,11 +81,15 @@ final class PermissionManager: ObservableObject {
     
     private func checkNotificationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        hasNotifications = settings.authorizationStatus == .authorized
+        let newStatus = settings.authorizationStatus == .authorized
+        print("📱 Notification permission status: \(newStatus ? "authorized" : "not authorized")")
+        hasNotifications = newStatus
     }
     
     private func checkContactsStatus() async {
         let status = CNContactStore.authorizationStatus(for: .contacts)
-        hasContacts = status == .authorized
+        let newStatus = status == .authorized
+        print("📱 Contacts permission status: \(newStatus ? "authorized" : "not authorized")")
+        hasContacts = newStatus
     }
 }
