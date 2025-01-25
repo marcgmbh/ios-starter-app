@@ -1,7 +1,14 @@
+//
+//  PermissionView.swift
+//  starter
+//
+//  Created by marc on 21.01.25.
+//
+
 import SwiftUI
 
 struct UsernameView: View {
-    @StateObject private var appState = AppStateManager.shared
+    @ObservedObject private var appState = AppStateManager.shared
     @StateObject private var supabase = SupabaseManager.shared
     @State private var username = ""
     @State private var showError = false
@@ -55,10 +62,10 @@ struct UsernameView: View {
         do {
             guard let userId = supabase.session?.user.id else { return }
             _ = try await APIClient.shared.updateProfile(userId: userId.uuidString, username: username)
-            appState.setUsername(username)
+            await appState.setUsername(username)
             appState.moveToNextScreen()
         } catch {
-            showError = true
+            showError = true    
             errorMessage = error.localizedDescription
         }
         

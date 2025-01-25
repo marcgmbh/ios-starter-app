@@ -1,9 +1,16 @@
+//
+//  LoginView.swift
+//  starter
+//
+//  Created by marc on 21.01.25.
+//
+
 import SwiftUI
 import Supabase
 
 @MainActor
 struct LoginView: View {
-    @StateObject private var appState = AppStateManager.shared
+    @ObservedObject private var appState = AppStateManager.shared
     @StateObject private var supabase = SupabaseManager.shared
     @State private var phoneNumber = ""
     @State private var verificationCode = ""
@@ -127,7 +134,7 @@ struct LoginView: View {
         
         do {
             try await supabase.verifyOTP(phoneNumber: formattedPhoneNumber, code: verificationCode)
-            appState.setLoggedIn(true)
+            await appState.setLoggedIn(true)
             appState.moveToNextScreen()
         } catch {
             showError = true

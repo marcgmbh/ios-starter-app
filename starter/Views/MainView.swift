@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct MainView: View {
-    @StateObject private var appState = AppStateManager.shared
+    @ObservedObject private var appState = AppStateManager.shared
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showManageFriends = false

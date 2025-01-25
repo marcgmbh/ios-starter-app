@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var appState = AppStateManager.shared
+    @ObservedObject private var appState = AppStateManager.shared
     
     var body: some View {
         NavigationStack {

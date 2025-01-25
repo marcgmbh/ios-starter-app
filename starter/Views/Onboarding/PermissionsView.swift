@@ -1,9 +1,16 @@
+//
+//  PermissionView.swift
+//  starter
+//
+//  Created by marc on 21.01.25.
+//
+
 import SwiftUI
 import Contacts
 import UserNotifications
 
 struct PermissionsView: View {
-    @StateObject private var appState = AppStateManager.shared
+    @ObservedObject private var appState = AppStateManager.shared
     @StateObject private var viewModel = PermissionsViewModel()
     
     var body: some View {

@@ -8,6 +8,7 @@
 import SwiftUI
 import UserNotifications
 import Contacts
+import Auth
 
 enum AppScreen: String {
     case login
@@ -23,15 +24,12 @@ enum AppScreen: String {
 final class AppStateManager: ObservableObject {
     static let shared = AppStateManager()
     
-    @Published private(set) var currentScreen: AppScreen = .login
-    @Published private(set) var isLoggedIn: Bool = false
-    @Published private(set) var username: String = ""
+    @Published var currentScreen: AppScreen = .login
+    @Published var isLoggedIn = false
+    @Published var username = ""
+    @Published var hasPermissions = false
     
     private let permissionManager = PermissionManager.shared
-    
-    var hasNotifications: Bool { permissionManager.hasNotifications }
-    var hasContacts: Bool { permissionManager.hasContacts }
-    var hasPermissions: Bool { hasNotifications && hasContacts }
     
     private init() {
         print("📱 Initializing AppStateManager...")
@@ -39,139 +37,131 @@ final class AppStateManager: ObservableObject {
         self.isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
         self.username = UserDefaults.standard.string(forKey: "username") ?? ""
         
-        // Try to restore session state
-        if let screenRaw = UserDefaults.standard.string(forKey: "currentScreen"),
-           let screen = AppScreen(rawValue: screenRaw) {
-            self.currentScreen = screen
-        }
-        
-        // Check permissions on launch
+        // Check permissions and session state
         Task {
             await checkPermissionStates()
+            await determineInitialScreen()
+        }
+    }
+    
+    @MainActor
+    private func determineInitialScreen() async {
+        // Check if we have a saved session
+        if let sessionData = UserDefaults.standard.data(forKey: "supabase_session"),
+           let _ = try? JSONDecoder().decode(Session.self, from: sessionData) {
+            print("📱 Found saved session")
+            isLoggedIn = true
             
-            // Check if we have a saved session
-            if UserDefaults.standard.data(forKey: "supabase_session") != nil {
-                print("📱 Found saved session, setting logged in state")
-                self.isLoggedIn = true
-                
-                // Set screen based on permissions
-                if !hasPermissions {
-                    print("📱 Missing permissions, showing permission screen")
-                    self.currentScreen = .permissions
-                } else if self.currentScreen == .login {
-                    print("📱 Has permissions, showing main screen")
-                    self.currentScreen = .main
-                }
+            // Check username first
+            if username.isEmpty {
+                print("📱 No username set, showing username screen")
+                currentScreen = .username
+            } else if !hasPermissions {
+                print("📱 Missing permissions, showing permission screen")
+                currentScreen = .permissions
             } else {
-                print("📱 No saved session found, setting logged out state")
-                self.isLoggedIn = false
-                self.currentScreen = .login
+                print("📱 All set, showing main screen")
+                currentScreen = .main
             }
+        } else {
+            print("📱 No saved session found, showing login screen")
+            isLoggedIn = false
+            currentScreen = .login
+        }
+    }
+    
+    @MainActor
+    func setLoggedIn(_ value: Bool) async {
+        print("📱 Setting logged in state to:", value)
+        isLoggedIn = value
+        UserDefaults.standard.set(value, forKey: "isLoggedIn")
+        
+        if !value {
+            // Logout
+            print("📱 Logged out, showing login screen")
+            username = ""
+            UserDefaults.standard.removeObject(forKey: "username")
+            currentScreen = .login
+            return
+        }
+        
+        // Login flow
+        if username.isEmpty {
+            print("📱 No username set, showing username screen")
+            currentScreen = .username
+        } else {
+            await checkPermissionStates()
+            if !hasPermissions {
+                print("📱 Missing permissions, showing permission screen")
+                currentScreen = .permissions
+            } else {
+                print("📱 All set, showing main screen")
+                currentScreen = .main
+            }
+        }
+    }
+    
+    @MainActor
+    func setUsername(_ value: String) async {
+        print("📱 Setting username to:", value)
+        username = value
+        UserDefaults.standard.set(value, forKey: "username")
+        
+        // After setting username, check permissions
+        await checkPermissionStates()
+        if !hasPermissions {
+            print("📱 Missing permissions, showing permission screen")
+            currentScreen = .permissions
+        } else {
+            print("📱 All set, showing main screen")
+            currentScreen = .main
         }
     }
     
     func moveToNextScreen() {
         switch currentScreen {
         case .login:
-            Task {
-                await checkUserStateAndNavigate()
-            }
+            // Handled by setLoggedIn
+            break
         case .username:
-            currentScreen = hasPermissions ? .main : (hasNotifications ? .contacts : .notifications)
+            // Handled by setUsername
+            break
         case .notifications:
+            print("📱 Moving to contacts screen")
             currentScreen = .contacts
         case .contacts, .permissions:
-            currentScreen = .main
-        case .main, .complete:
-            break
-        }
-        
-        // Save state
-        UserDefaults.standard.set(currentScreen.rawValue, forKey: "currentScreen")
-    }
-    
-    private func checkUserStateAndNavigate() async {
-        guard let userId = SupabaseManager.shared.session?.user.id else { return }
-        
-        do {
-            let profile = try await APIClient.shared.fetchProfile(userId: userId.uuidString)
-            if let username = profile.username {
-                await updateUsername(username)
-                currentScreen = hasPermissions ? .main : (hasNotifications ? .contacts : .notifications)
-            } else {
-                currentScreen = .username
-            }
-        } catch {
-            currentScreen = .username
-        }
-    }
-    
-    func signOut() async throws {
-        do {
-            try await SupabaseManager.shared.client.auth.signOut()
-            await updateLoginState(false)
-            await updateUsername("")
-            currentScreen = .login
-            UserDefaults.standard.set(AppScreen.login.rawValue, forKey: "currentScreen")
-        } catch {
-            throw error
-        }
-    }
-    
-    func setLoggedIn(_ value: Bool) {
-        print("📱 Setting logged in state to: \(value)")
-        isLoggedIn = value
-        UserDefaults.standard.set(value, forKey: "isLoggedIn")
-        
-        if value {
-            if currentScreen == .login {
+            Task {
+                await checkPermissionStates()
                 if !hasPermissions {
-                    print("📱 Missing permissions, showing permission screen")
+                    print("📱 Still missing permissions, staying on permission screen")
                     currentScreen = .permissions
                 } else {
-                    print("📱 Has permissions, showing main screen")
+                    print("📱 All permissions granted, moving to main")
                     currentScreen = .main
                 }
             }
-        } else {
-            currentScreen = .login
-            username = ""
-            UserDefaults.standard.removeObject(forKey: "username")
-        }
-        
-        // Save current screen
-        UserDefaults.standard.set(currentScreen.rawValue, forKey: "currentScreen")
-    }
-    
-    func setUsername(_ value: String) {
-        Task { @MainActor in
-            await updateUsername(value)
+        case .main, .complete:
+            break
         }
     }
     
-    private func updateLoginState(_ value: Bool) async {
-        isLoggedIn = value
-        UserDefaults.standard.set(value, forKey: "isLoggedIn")
-    }
-    
-    private func updateUsername(_ value: String) async {
-        username = value
-        UserDefaults.standard.set(value, forKey: "username")
-    }
-    
-    func checkPermissions() async -> Bool {
-        await checkPermissionStates()
-        return hasPermissions
-    }
-    
+    @MainActor
     func checkPermissionStates() async {
         print("📱 Checking permission states...")
-        await permissionManager.checkPermissionStates()
-        
-        // Update screen if needed
-        if isLoggedIn && !hasPermissions && currentScreen == .main {
-            print("📱 Missing permissions detected, moving to permissions screen")
-            currentScreen = .permissions
+        await permissionManager.checkCurrentStatus()
+        hasPermissions = permissionManager.hasNotifications && permissionManager.hasContacts
+    }
+    
+    @MainActor
+    func signOut() async throws {
+        print("📱 Signing out...")
+        do {
+            try await SupabaseManager.shared.signOut()
+            await setLoggedIn(false)
+            print("✅ Sign out successful")
+        } catch {
+            print("❌ Sign out failed:", error)
+            throw error
         }
     }
 }
