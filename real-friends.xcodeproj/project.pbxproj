@@ -416,7 +416,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"starter/Preview Content\"";
-				DEVELOPMENT_TEAM = 966T49FC4R;
+				DEVELOPMENT_TEAM = 852G82KW89;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSContactsUsageDescription = "We need access to your contacts to help you find and connect with your friends on the app.";
@@ -448,7 +448,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"starter/Preview Content\"";
-				DEVELOPMENT_TEAM = 966T49FC4R;
+				DEVELOPMENT_TEAM = 852G82KW89;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSContactsUsageDescription = "We need access to your contacts to help you find and connect with your friends on the app.";
