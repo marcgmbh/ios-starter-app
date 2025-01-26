@@ -10,6 +10,7 @@ import UIKit
 import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
+import OSLog
 
 @Observable final class NotificationManager: NSObject {
     static let shared = NotificationManager()
@@ -22,40 +23,41 @@ import UserNotifications
     func initialize() {
         print("📱 Initializing NotificationManager...")
         setupNotifications()
-        requestNotificationPermissions()
-    }
-    
-    private func setupNotifications() {
-        print("📱 Setting up notification delegates...")
-        UNUserNotificationCenter.current().delegate = self
-        Messaging.messaging().delegate = self
         
-        // Don't try to get FCM token here since we need APNs token first
-        print("📱 Waiting for APNs token before requesting FCM token...")
-    }
-    
-    private func requestNotificationPermissions() {
-        print("📱 Requesting notification permissions...")
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { [weak self] granted, error in
-            print("📱 Notification permission granted:", granted)
-            if let error = error {
-                print("❌ Notification permission error:", error)
-                return
-            }
-            
-            if granted {
-                DispatchQueue.main.async {
-                    print("📱 Registering for remote notifications...")
-                    UIApplication.shared.registerForRemoteNotifications()
-                }
+        // Check if we already have notification permission
+        Task {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            if settings.authorizationStatus == .authorized {
+                print("📱 Notifications already authorized, registering for remote notifications")
+                registerForRemoteNotifications()
             } else {
-                print("⚠️ Notification permissions denied by user")
+                print("📱 Notifications not authorized: \(settings.authorizationStatus.rawValue)")
             }
         }
     }
     
+    private func setupNotifications() {
+        print("📱 Setting up notification delegates")
+        UNUserNotificationCenter.current().delegate = self
+        Messaging.messaging().delegate = self
+    }
+    
+    func registerForRemoteNotifications() {
+        print("📱 Registering for remote notifications")
+        DispatchQueue.main.async {
+            UIApplication.shared.registerForRemoteNotifications()
+            // Don't fetch FCM token here, it will be fetched when we get APNS token
+        }
+    }
+    
     func fetchAndUpdateFCMToken() {
-        print("📱 Fetching FCM token...")
+        print("📱 Fetching FCM token")
+        // First make sure we're registered for remote notifications
+        DispatchQueue.main.async {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+        
+        // Then get FCM token
         Messaging.messaging().token { [weak self] token, error in
             if let error = error {
                 print("❌ Error fetching FCM token:", error)
@@ -67,7 +69,7 @@ import UserNotifications
                 return
             }
             
-            print("✅ Fetched FCM token:", token)
+            print("✅ Successfully fetched FCM token")
             Task { @MainActor [weak self] in
                 await self?.saveFCMTokenIfNeeded(token)
             }
@@ -75,22 +77,26 @@ import UserNotifications
     }
     
     private func saveFCMTokenIfNeeded(_ token: String) async {
-        guard await SupabaseManager.shared.session != nil else {
-            print("ℹ️ User not logged in, skipping token save")
+        print("📱 Checking if FCM token needs to be saved")
+        
+        // Check login state
+        guard let session = await SupabaseManager.shared.session else {
+            print("📱 User not logged in, skipping token save")
             return
         }
         
         guard token != lastSavedToken else {
-            print("ℹ️ Token unchanged, skipping save")
+            print("📱 Token unchanged, skipping save")
             return
         }
         
         do {
             try await SupabaseManager.shared.saveFCMToken(token)
             lastSavedToken = token
-            print("✅ FCM token saved successfully")
+            print("✅ Successfully saved FCM token")
         } catch {
             print("❌ Failed to save FCM token:", error)
+            lastSavedToken = nil
         }
     }
 }
@@ -102,8 +108,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let userInfo = notification.request.content.userInfo
-        print("📱 Received notification while app in foreground:", userInfo)
+        print("📱 Received notification while app in foreground")
         completionHandler([.banner, .sound])
     }
     
@@ -112,8 +117,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let userInfo = response.notification.request.content.userInfo
-        print("📱 User tapped notification:", userInfo)
+        print("📱 User tapped notification")
         completionHandler()
     }
 }
@@ -122,13 +126,26 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 extension NotificationManager: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else {
-            print("❌ Received nil FCM token")
+            print("❌ Received nil FCM token from delegate")
             return
         }
         
-        print("📱 FCM token updated:", token)
+        print("📱 FCM token updated from delegate")
         Task { @MainActor in
-            await self.saveFCMTokenIfNeeded(token)
+            await saveFCMTokenIfNeeded(token)
         }
+    }
+}
+
+// MARK: - UIApplicationDelegate
+extension NotificationManager {
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        print("📱 Received APNS token")
+        Messaging.messaging().apnsToken = deviceToken
+        fetchAndUpdateFCMToken()
+    }
+    
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("❌ Failed to register for remote notifications:", error)
     }
 }

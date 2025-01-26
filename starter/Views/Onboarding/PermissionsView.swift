@@ -88,7 +88,13 @@ final class PermissionsViewModel: ObservableObject {
         Task {
             guard let granted = try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound, .badge]) else { return }
+            
             hasNotifications = granted
+            
+            if granted {
+                // Register for remote notifications after permission is granted
+                NotificationManager.shared.registerForRemoteNotifications()
+            }
         }
     }
     

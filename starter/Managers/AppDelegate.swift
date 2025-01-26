@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        print("📱 App launching, configuring Firebase...")
+        print("📱 App launching...")
         FirebaseApp.configure()
         print("📱 Initializing notification manager...")
         NotificationManager.shared.initialize()
@@ -26,20 +26,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
-        print("📱 Received APNs token")
-        
-        // Convert token to string for logging
-        let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-        print("📱 APNs token:", tokenString)
-        
-        // Set APNs token which will trigger FCM token generation
-        Messaging.messaging().apnsToken = deviceToken
+        NotificationManager.shared.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
     }
     
     func application(
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
-        print("❌ Failed to register for remote notifications:", error)
+        NotificationManager.shared.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
     }
 }

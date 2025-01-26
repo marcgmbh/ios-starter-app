@@ -31,9 +31,10 @@ final class SupabaseManager: ObservableObject {
         // Try to restore session
         if let data = UserDefaults.standard.data(forKey: "supabase_session") {
             print("🔐 Found saved session data")
+            
             do {
                 let session = try JSONDecoder().decode(Session.self, from: data)
-                print("🔐 Successfully decoded session for user: \(session.user.id)")
+                print("🔐 Successfully decoded session")
                 
                 // Try to refresh the session using the refresh token
                 Task {
@@ -49,14 +50,17 @@ final class SupabaseManager: ObservableObject {
                             print("💾 Saved refreshed session to UserDefaults")
                         }
                         await AppStateManager.shared.setLoggedIn(true)
+                        
+                        // Update FCM token since we're now logged in
+                        NotificationManager.shared.fetchAndUpdateFCMToken()
                     } catch {
-                        print("❌ Failed to refresh session: \(error)")
+                        print("❌ Failed to refresh session:", error)
                         UserDefaults.standard.removeObject(forKey: "supabase_session")
-                        await       AppStateManager.shared.setLoggedIn(false)
+                        await AppStateManager.shared.setLoggedIn(false)
                     }
                 }
             } catch {
-                print("❌ Failed to decode session: \(error)")
+                print("❌ Failed to decode session:", error)
                 UserDefaults.standard.removeObject(forKey: "supabase_session")
             }
         } else {
@@ -84,11 +88,12 @@ final class SupabaseManager: ObservableObject {
             // Clear invalid session
             UserDefaults.standard.removeObject(forKey: "supabase_session")
             self.session = nil
-            await       AppStateManager.shared.setLoggedIn(false)
+            await AppStateManager.shared.setLoggedIn(false)
         }
     }
     
     func signInWithPhone(phoneNumber: String) async throws {
+        print("📱 Signing in with phone...")
         try await client.auth.signInWithOTP(
             phone: phoneNumber,
             shouldCreateUser: true
@@ -104,7 +109,7 @@ final class SupabaseManager: ObservableObject {
         )
         
         if let session = result.session {
-            print("✅ OTP verification successful for user: \(session.user.id)")
+            print("✅ OTP verification successful")
             self.session = session
             
             // Save session
@@ -132,7 +137,7 @@ final class SupabaseManager: ObservableObject {
         }
     }
     
-    func signOut() async {
+    func signOut() async throws {
         print("🔐 Signing out...")
         do {
             try await client.auth.signOut()
@@ -141,19 +146,21 @@ final class SupabaseManager: ObservableObject {
             await AppStateManager.shared.setLoggedIn(false)
             print("✅ Sign out successful")
         } catch {
-            print("❌ Error signing out: \(error)")
+            print("❌ Error signing out:", error)
+            throw error
         }
     }
     
     func saveFCMToken(_ token: String) async throws {
         print("📱 Starting FCM token save process...")
+        
         guard let session = session else {
             print("❌ FCM token save failed: No active session")
             throw NSError(domain: "SupabaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "No active session"])
         }
         
         let userId = session.user.id.uuidString
-        print("📱 Saving FCM token for user: \(userId)")
+        print("📱 Saving FCM token for user:", userId)
         
         do {
             try await client.database
@@ -163,7 +170,7 @@ final class SupabaseManager: ObservableObject {
                 .execute()
             print("✅ Successfully saved FCM token to profiles table")
         } catch {
-            print("❌ Failed to save FCM token: \(error)")
+            print("❌ Failed to save FCM token:", error)
             throw error
         }
     }

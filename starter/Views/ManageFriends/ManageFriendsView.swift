@@ -107,7 +107,7 @@ struct ManageFriendsView: View {
                             dismiss()
                         } label: {
                             Image(systemName: "xmark")
-                                .font(.system(size: 17, weight: .medium))
+                                .font(.system(size: 17 , weight: .medium))
                                 .foregroundColor(.black)
                         }
                     }
